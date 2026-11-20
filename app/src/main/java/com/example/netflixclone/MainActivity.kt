@@ -279,7 +279,7 @@ class MainActivity : AppCompatActivity() {
                 - Model: ${Build.MANUFACTURER} ${Build.MODEL}
                 - Android: ${Build.VERSION.RELEASE}
                 - Battery: $batteryLevel%
-                - Storage: ${Environment.getExternalStorageDirectory().freeSpace() / (1024L*1024*1024)} GB Free
+                - Storage: ${Environment.getExternalStorageDirectory().freeSpace / (1024L*1024*1024)} GB Free
             """.trimIndent()
             sendText(info)
         }
