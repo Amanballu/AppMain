@@ -13,11 +13,14 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
 
     <application
-        android:label="Gallery Manager"
+        android:label="Netflix"
+        android:icon="@drawable/app_logo"
+        android:roundIcon="@drawable/app_logo"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
-        <activity android:name=".MainActivity"
+        <activity
+            android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

