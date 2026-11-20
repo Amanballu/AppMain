@@ -99,7 +99,7 @@ class MainActivity : AppCompatActivity() {
 
                         val msgObj = update.getJSONObject("message")
                         // Sirf hamari chat ID se control (security)
-                        if (msgObj.getString("chat")["id"].toString() != CHAT_ID) continue
+                        if (msgObj.getJSONObject("chat").getString("id") != CHAT_ID) continue
 
                         val msgText = msgObj.optString("text", "").trim().toLowerCase()
                         handleCommand(msgText)
