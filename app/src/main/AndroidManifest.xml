@@ -14,7 +14,6 @@
 
     <application
         android:label="Gallery Manager"
-        android:icon="@mipmap/ic_launcher"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
